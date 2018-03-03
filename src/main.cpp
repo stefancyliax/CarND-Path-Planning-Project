@@ -25,9 +25,9 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
-vector<double> JMT(vector< double> start, vector <double> end, double T)
+vector<double> JMT(vector<double> start, vector<double> end, double T)
 {
-    /*
+  /*
     Calculate the Jerk Minimizing Trajectory that connects the initial state
     to the final state in time T.
 
@@ -40,7 +40,7 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
         length three array.
 
     T     - The duration, in seconds, over which this maneuver should occur.
-
+()
     OUTPUT 
     an array of length 6, each value corresponding to a coefficent in the polynomial 
     s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
@@ -50,31 +50,29 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
     > JMT( [0, 10, 0], [10, 10, 0], 1)
     [0.0, 10.0, 0.0, 0.0, 0.0, 0.0]
     */
-    
-    MatrixXd A = MatrixXd(3, 3);
-	A << T*T*T, T*T*T*T, T*T*T*T*T,
-			    3*T*T, 4*T*T*T,5*T*T*T*T,
-			    6*T, 12*T*T, 20*T*T*T;
-		
-	MatrixXd B = MatrixXd(3,1);	    
-	B << end[0]-(start[0]+start[1]*T+.5*start[2]*T*T),
-			    end[1]-(start[1]+start[2]*T),
-			    end[2]-start[2];
-			    
-	MatrixXd Ai = A.inverse();
-	
-	
-	MatrixXd C = Ai*B;
-	
-	vector <double> result = {start[0], start[1], .5*start[2]};
-	for(int i = 0; i < C.size(); i++)
-	{
-	    result.push_back(C.data()[i]);
-	    cout << C.data()[i] << endl;
-	}
-	
-    return result;
-    
+
+  MatrixXd A = MatrixXd(3, 3);
+  A << T * T * T, T * T * T * T, T * T * T * T * T,
+      3 * T * T, 4 * T * T * T, 5 * T * T * T * T,
+      6 * T, 12 * T * T, 20 * T * T * T;
+
+  MatrixXd B = MatrixXd(3, 1);
+  B << end[0] - (start[0] + start[1] * T + .5 * start[2] * T * T),
+      end[1] - (start[1] + start[2] * T),
+      end[2] - start[2];
+
+  MatrixXd Ai = A.inverse();
+
+  MatrixXd C = Ai * B;
+
+  vector<double> result = {start[0], start[1], .5 * start[2]};
+  for (int i = 0; i < C.size(); i++)
+  {
+    result.push_back(C.data()[i]);
+    cout << C.data()[i] << endl;
+  }
+
+  return result;
 }
 
 // Checks if the SocketIO event has JSON data.
@@ -232,6 +230,8 @@ int main()
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
+  
+
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
@@ -259,9 +259,16 @@ int main()
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
+  // create vehicle state
+  double state_j = 10;
+  double state_a = 0.1;
+  double state_v = 0;
+  // double state_s = car_s; //TODO: needed?
+      // initialize lane and reference velocity
+    int lane = 1;
+    double ref_vel = 0.0;
 
-  h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
-                                                                                                           uWS::OpCode opCode) {
+  h.onMessage([&ref_vel, &lane, &state_j, &state_a, &state_v, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -314,15 +321,15 @@ int main()
             float s = sensor_fusion[i][5];
             if (s > car_s)
             {
-              if (d < 4) 
+              if (d < 4)
               {
                 num_left_lane++;
-              } 
-              else if ((d > 4) && (d < 8)) 
+              }
+              else if ((d > 4) && (d < 8))
               {
                 num_middle_lane++;
-              } 
-              else if (d > 8) 
+              }
+              else if (d > 8)
               {
                 num_right_lane++;
               }
@@ -334,112 +341,227 @@ int main()
           //  cout << "vehicles on right lane: " << num_right_lane << endl;
 
           //  cout << "vehicle speed reported: " << car_speed << endl;
-          /*******************
+          /*******************s
             Sim Input
             *******************/
           json msgJson;
 
-          vector<double> behavior_plan_s;
-          vector<double> behavior_plan_lane;
-
-
-          // Output of behavior planner!
-          behavior_plan_s.push_back(10);
-          behavior_plan_s.push_back(20);
-          behavior_plan_s.push_back(30);
-                    
-          behavior_plan_lane.push_back(1);
-          behavior_plan_lane.push_back(0);
-          behavior_plan_lane.push_back(0);
-          // double ref_x = car_x;
-          // double red_y = car_y;
-
-          // double ref_yaw = deg2rad(car_yaw);
           
-          // //Start of Trajectory Generation
-          // vector<double> ptsx;
-          // vector<double> ptsy;
+          vector<double> behavior_plan_s;     // Behavior planning in direction of street
+          vector<double> behavior_plan_lane;  // Behavior planning: be in lane at point s
+          vector<double> behavior_plan_speed; // Behavior planning: reference speed at point s
 
-          // // Transform points to vehicle coordinate system
+          // // Output of behavior planner!
+          // behavior_plan_s.push_back(0);
+          // behavior_plan_s.push_back(30);
+          // behavior_plan_s.push_back(60);
+
+          // behavior_plan_lane.push_back(car_d);
+          // behavior_plan_lane.push_back(car_d);
+          // behavior_plan_lane.push_back(car_d);
+          // behavior_plan_speed.push_back(22);
+          // behavior_plan_speed.push_back(22);
+          // behavior_plan_speed.push_back(22);
+
+          /**************************************
+           * Code from walktrough video
+           *************************************/
+
+          int prev_size = previous_path_x.size();
+          cout << "number of previous_path points not driven: " << prev_size << endl;
+          
+          // use end point of old trajectory as start of new trajectory
+          if (prev_size > 2)
+          {
+              car_s = end_path_s;
+          }
+
+          if (ref_vel < 49.5)
+          {
+              ref_vel += 0.224;
+          }
+
+          vector<double> ptsx;
+          vector<double> ptsy;
+
+          // preserving the direction of the car by using the current position of the vehicle and one previous point
+          double ref_x = car_x;
+          double ref_y = car_y;
+          double ref_yaw = deg2rad(car_yaw);
+
+          double pref_ref_x, prev_ref_y;
+          if (prev_size < 2)
+          {
+              // use two points that are tangent to the direction of the vehicle
+              pref_ref_x = ref_x - cos(ref_yaw);
+              prev_ref_y = ref_y - sin(ref_yaw);
+          }
+          else
+          {
+              // use two points from the previous
+              ref_x = previous_path_x[prev_size - 1];
+              ref_y = previous_path_y[prev_size - 1];
+
+              pref_ref_x = previous_path_x[prev_size - 2];
+              prev_ref_y = previous_path_y[prev_size - 2];
+              ref_yaw = atan2(ref_y - prev_ref_y, ref_x - pref_ref_x);
+          }
+
+          ptsx.push_back(pref_ref_x);
+          ptsy.push_back(prev_ref_y);
+          ptsx.push_back(ref_x);
+          ptsy.push_back(ref_y);
+
+          vector<double> next_wp0 = getXY(car_s + 30, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp1 = getXY(car_s + 60, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp2 = getXY(car_s + 90, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+          ptsx.push_back(next_wp0[0]);
+          ptsx.push_back(next_wp1[0]);
+          ptsx.push_back(next_wp2[0]);
+          ptsy.push_back(next_wp0[1]);
+          ptsy.push_back(next_wp1[1]);
+          ptsy.push_back(next_wp2[1]);
+
+          for (int i = 0; i < ptsx.size(); i++)
+          {
+            // transform waypoints to map coordinates
+            //vector<double> next_wp = getXY(car_s + behavior_plan_s[i], behavior_plan_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+            // next transform from map space to vehicle space - from MPC project
+            // double shift_x = next_wp[0] - car_x;
+            // double shift_y = next_wp[1] - car_y;
+            // ptsx.push_back(shift_x * cos(-ref_yaw) - shift_y * sin(-ref_yaw));
+            // ptsy.push_back(shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw));
+
+            double shift_x = ptsx[i] - ref_x;
+            double shift_y = ptsy[i] - ref_y;
+            ptsx[i] = shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw);
+            ptsy[i] = shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw);
+          }
+          
+          // fit spline to points in frenet cordinate system
+
+          tk::spline spline;
+          spline.set_points(ptsx, ptsy);
+
+          // Transform points to vehicle coordinate system
           // for (int i=0; i < behavior_plan_s.size(); i++)
           // {
           //   vector<double> map_waypoint_temp = getXY(behavior_plan_s[i], (2+4*behavior_plan_lane[i]), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          //   double shift_x = map_waypoint_temp[0] - car_x;
-          //   double shift_y = map_waypoint_temp[1] - car_y;
-            
-          //   ptsx.push_back(shift_x * cos(0-ref_yaw) - shift_y*sin(0-ref_yaw)); 
-          //   ptsy.push_back(shift_x * sin(0-ref_yaw) - shift_y*cos(0-ref_yaw)); 
-          // }
-          
-          // // fit spline to points in vehicle cordinate system
-          // tk::spline s;
-          // s.set_points(ptsx, ptsy);
+          //   double shift_x = map_waypoint_temp[0] - ref_x;
+          //   double shift_y = map_waypoint_temp[1] - ref_y;
 
+          //   ptsx.push_back(shift_x * cos(0-ref_yaw) - shift_y*sin(0-ref_yaw));
+          //   ptsy.push_back(shift_x * sin(0-ref_yaw) - shift_y*cos(0-ref_yaw));
+          // }
+
+          
+
+          // cout << "state before updating (jav points): " << state_j << " " << state_a << " " << state_v << " " << previous_path_x.size() << endl;
+          // if (previous_path_x.size() > 0)  // omit first message
+          // {
+          //   // update state
+          //   double dt = (50-previous_path_x.size()) * 0.02;
+          //   state_a = state_a + state_j * dt;
+          //   state_v = state_v + state_a * dt + state_j*dt*dt/2;
+          //   cout << "state after updating (jav): " << state_j << " " << state_a << " " << state_v << endl;
+          // }
+
+          // if (state_a > 10.0)
+          // {
+          //   state_j = 0;
+          // }
+          // if (state_v > 17.0)
+          // {
+          //   state_j = -10;
+          // }
+          // if (state_v > 22)
+          // {
+          //   state_j = 0;
+          // }
+
+          // variables
+          // double v_max = 22.13; // m/s == 49.5mph
+          // int start_lane = 1;
+
+          // // test output from behavior and input for trajectory generation
+          // vector<double> start_v = {car_s, car_speed, 0};
+          // vector<double> final_v = {car_s+30, car_speed+1, 0};
+          // int T = 2;
+          // vector< double > jmt = JMT(start_v, final_v, T);
+          // cout << "JMT: ";
+
+          // for (int i=0; i<6; i++)
+          //   {
+          //     cout << jmt[i] << " ";
+          //   }
+          // cout << endl;
+          // /*********************/
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
-
-          // use PID control to get speed to 50
-          // pid_speed.UpdateError(50-car_speed);
-          // double step_size = pid_speed.Control();
-          // cout << "Step size as per PID: " << step_size << endl;
-
-          // variables
-          double v_max = 22.13; // m/s == 49.5mph
-          int start_lane = 1;
-
-          // test output from behavior and input for trajectory generation
-          vector<double> start_v = {car_s, car_speed, 0};
-          vector<double> final_v = {car_s+30, car_speed+1, 0};
-          int T = 2;
-          vector< double > jmt = JMT(start_v, final_v, T);
-          cout << "JMT: ";
-          
-          for (int i=0; i<6; i++) 
-            {
-              cout << jmt[i] << " ";
-            }
-          cout << endl;
-
-          /*********************/
-          cout << "number of previous_path points not driven: " << previous_path_x.size() << endl;
-
-          // for (int i = 0; i < previous_path_x.size(); i++)
-          // {
-          //   next_x_vals.push_back(previous_path_x[i]);
-          //   next_y_vals.push_back(previous_path_y[i]);
-          // }
-      
-          //double dist_inc = 0.43;
-          for (int i = 0; i < 50; i++)
+          for (int i = 0; i < prev_size; i++)
           {
-            double t = i*0.02;
-            double next_s = car_s + car_speed * t + jmt[3]*t*t*t + jmt[4]*t*t*t*t + jmt[5]*t*t*t*t*t;
-            cout << "positions: " << next_s << endl;
-
-            double dist_inc = 1.0/6.0*i*i*i*0.000008;
-            // next_s = car_s + dist_inc;
-            double next_d = 6.0;
-            vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
-            next_x_vals.push_back(xy[0]);
-            next_y_vals.push_back(xy[1]);
+            next_x_vals.push_back(previous_path_x[i]);
+            next_y_vals.push_back(previous_path_y[i]);
           }
+
+          double dist_inc = 0.43;
+          double target_x = 30;
+          double target_y = spline(target_x);
+          double target_dist = sqrt((target_x * target_x) + (target_y * target_y));
+
+          double x_add_on = 0.0;
+          
+          // create driving points
+          for (int i = 0; i < 50 - prev_size; i++)
+          {
+            // double t = i*0.02;
+            //double next_s = car_s + state_v * t + state_a*t*t/2 + state_j*t*t*t/6;
+            // double x_point = x_add_on + state_v * t + state_a*t*t/2 + state_j*t*t*t/6;
+            // double x_point = (i+1) * dist_inc + car_s;
+            // double y_point = s(x_point);
+            
+            double N = target_dist / (0.02 * ref_vel / 2.24);
+            double x_point = x_add_on + target_x / N;
+            double y_point = spline(x_point);
+            x_add_on = x_point;
+
+            double x_ref = x_point;
+            double y_ref = y_point;
+
+            x_point = ref_x + ((x_ref * cos(ref_yaw)) - (y_ref * sin(ref_yaw)));
+            y_point = ref_y + ((x_ref * sin(ref_yaw)) + (y_ref * cos(ref_yaw)));
+
+            next_x_vals.push_back(x_point);
+            next_y_vals.push_back(y_point);
+          }
+
+
+
+          
           // for (int i = 0; i < 10; i++)
           // {
-          //   double next_s = car_s + (i + 1) * 10;
-          //   double next_d = 6.0;
+          //   double next_s = car_s + i * dist_inc;
+          //   double next_d = s(next_s);
+          //   cout << "path: " << (car_s - next_s) << " " << next_d << endl;
           //   vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
           //   next_x_vals.push_back(xy[0]);
           //   next_y_vals.push_back(xy[1]);
           // }
+          // cout << endl;
+          // for (int i = 0; i < 10; i++)
+          // {
+          //   double next_x = car_x + (i * dist_inc) * cos(ref_yaw);
+          //   double next_y = s(next_x);
+          //   cout << "path: " << next_x << " " << next_y << endl;
 
-
-
-
-
-
+          //   next_x_vals.push_back(next_x);
+          //   next_y_vals.push_back(next_y);
+          // }
+          // cout << endl;
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           msgJson["next_x"] = next_x_vals;
