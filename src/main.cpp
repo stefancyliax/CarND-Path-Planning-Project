@@ -90,7 +90,7 @@ string hasData(string s)
   else if (b1 != string::npos && b2 != string::npos)
   {
     return s.substr(b1, b2 - b1 + 2);
-  }
+  }{}
   return "";
 }
 
@@ -351,17 +351,19 @@ int main()
           vector<double> behavior_plan_lane;  // Behavior planning: be in lane at point s
           vector<double> behavior_plan_speed; // Behavior planning: reference speed at point s
 
-          // // Output of behavior planner!
-          // behavior_plan_s.push_back(0);
-          // behavior_plan_s.push_back(30);
-          // behavior_plan_s.push_back(60);
+          // Output of behavior planner!
+ 
+          behavior_plan_s.push_back(30);
+          behavior_plan_s.push_back(60);
+          behavior_plan_s.push_back(90);
 
-          // behavior_plan_lane.push_back(car_d);
-          // behavior_plan_lane.push_back(car_d);
-          // behavior_plan_lane.push_back(car_d);
-          // behavior_plan_speed.push_back(22);
-          // behavior_plan_speed.push_back(22);
-          // behavior_plan_speed.push_back(22);
+          behavior_plan_lane.push_back(lane);
+          behavior_plan_lane.push_back(lane);
+          behavior_plan_lane.push_back(lane);
+
+          behavior_plan_speed.push_back(22);
+          behavior_plan_speed.push_back(22);
+          behavior_plan_speed.push_back(22);
 
           /**************************************
            * Code from walktrough video
@@ -412,28 +414,19 @@ int main()
           ptsx.push_back(ref_x);
           ptsy.push_back(ref_y);
 
-          vector<double> next_wp0 = getXY(car_s + 30, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s + 60, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s + 90, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
-          ptsx.push_back(next_wp0[0]);
-          ptsx.push_back(next_wp1[0]);
-          ptsx.push_back(next_wp2[0]);
-          ptsy.push_back(next_wp0[1]);
-          ptsy.push_back(next_wp1[1]);
-          ptsy.push_back(next_wp2[1]);
+          // transform behavior planning to map coordinates
 
+          for (int i=0; i < behavior_plan_s.size(); i++)
+          {
+            vector<double> map_waypoint_temp = getXY(car_s + behavior_plan_s[i], (2+4*behavior_plan_lane[i]), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            ptsx.push_back(map_waypoint_temp[0]);
+            ptsy.push_back(map_waypoint_temp[1]);
+          }
+
+          // transform waypoints from map coordinates to vehicle coordinates
           for (int i = 0; i < ptsx.size(); i++)
           {
-            // transform waypoints to map coordinates
-            //vector<double> next_wp = getXY(car_s + behavior_plan_s[i], behavior_plan_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
-            // next transform from map space to vehicle space - from MPC project
-            // double shift_x = next_wp[0] - car_x;
-            // double shift_y = next_wp[1] - car_y;
-            // ptsx.push_back(shift_x * cos(-ref_yaw) - shift_y * sin(-ref_yaw));
-            // ptsy.push_back(shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw));
-
             double shift_x = ptsx[i] - ref_x;
             double shift_y = ptsy[i] - ref_y;
             ptsx[i] = shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw);
@@ -441,7 +434,6 @@ int main()
           }
           
           // fit spline to points in frenet cordinate system
-
           tk::spline spline;
           spline.set_points(ptsx, ptsy);
 
