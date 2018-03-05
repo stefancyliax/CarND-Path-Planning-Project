@@ -257,17 +257,14 @@ int main()
         map_waypoints_dx.push_back(d_x);
         map_waypoints_dy.push_back(d_y);
     }
-    // create vehicle state
-    const double max_jerk = 7.0;
-    double state_j = 0; // needed?
-    double state_a = 0.1;
-    double state_v = 0;
-    // double state_s = car_s; //TODO: needed?
-    // initialize lane and reference velocity
+
+    // initialize hyperparameters
     int lane = 1;
     double ref_vel = 0.0;
+    const double max_vel = 49.5;
+    const int ticks = 50;
 
-    h.onMessage([&ref_vel, &lane, &state_j, &state_a, &state_v, &max_jerk, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+    h.onMessage([&ref_vel, &lane, &max_vel, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
@@ -327,10 +324,10 @@ int main()
                             else if ((d > 4) && (d < 8))
                             {
                                 num_middle_lane++;
-                                if (s < car_s+30)
-                                {
-                                    lane = 0;
-                                }
+                                // if (s < car_s+30)
+                                // {
+                                //     lane = 0;
+                                // }
                             }
                             else if (d > 8)
                             {
@@ -339,11 +336,52 @@ int main()
                         }
                     }
 
-                    //  cout << "vehicles on left lane: " << num_left_lane << endl;
-                    //  cout << "vehicles on middle lane: " << num_middle_lane << endl;
-                    //  cout << "vehicles on right lane: " << num_right_lane << endl;
+                    cout << "vehicles on left lane: " << num_left_lane << endl;
+                    cout << "vehicles on middle lane: " << num_middle_lane << endl;
+                    cout << "vehicles on right lane: " << num_right_lane << endl;
 
-                    //  cout << "vehicle speed reported: " << car_speed << endl;
+                    // cout << "vehicle speed reported: " << car_speed << endl;
+                    double closest_vehicle_in_lane = 99999;
+                    double behavior_plan_speed = max_vel;
+                    
+                    // update lane
+                    lane = round((car_d-2)/4);
+                    cout << "detected lane: " << lane << endl; 
+
+                    // loop through all vehicles
+                    for (int i = 0; i < sensor_fusion.size(); i++)
+                    {
+                        float d = sensor_fusion[i][6];
+                        float s = sensor_fusion[i][5];
+
+                        if ((d > (2+lane*4)-2) && (d < (2+lane*4)+2))
+                        {
+                            // vehicle is in my lane
+                            if ((s > car_s) && (closest_vehicle_in_lane > (s - car_s)))
+                            {   
+                                // find vehicle in same lane that is closest.
+                                closest_vehicle_in_lane = (s - car_s);
+                                double vx = sensor_fusion[i][3];
+                                double vy = sensor_fusion[i][4];
+                                cout << "found vehicle in same lane with distance and speed: " << closest_vehicle_in_lane << " " << sqrt(vx*vx+vy*vy)*2.24 << endl; 
+                                if (closest_vehicle_in_lane < 35.0)
+                                {
+                                    // if the closest vehicle in front is at a proper distance, match speed
+                                    behavior_plan_speed = sqrt(vx*vx+vy*vy)*2.24;
+                                    cout << "updated planned speed to: " << behavior_plan_speed << endl;
+                                }
+                                if (closest_vehicle_in_lane < 25.0)
+                                {   
+                                    // if the vehicle in front is to close, reduce speed a bit more until the distance is safe
+                                    behavior_plan_speed -= 5;
+                                    cout << "vehicle in front to close, breaking!" << endl;
+                                }
+                            }
+                            
+                        
+                        }
+                    }
+
                     /*******************s
                     Sim Input
                     *******************/
@@ -362,17 +400,27 @@ int main()
                     behavior_plan_lane.push_back(lane);
                     behavior_plan_lane.push_back(lane);
 
+                    int prev_size = previous_path_x.size();
+                    // cout << "number of previous_path points not driven: " << prev_size << endl;
 
-                    if (ref_vel < 49.5)
-                    {
-                        ref_vel += 0.224;
+                    // super simple controller to change the speed slowly
+                    if ( (ref_vel > behavior_plan_speed) )//|| ((closest_vehicle_in_lane < 25.0) && (behavior_plan_speed-5 < ref_vel)) )
+                    {   
+                        // if the current speed is above the planned speed, slow down
+                        // also if the vehicle in front is to close, slow down a bit until the distance is right
+                        ref_vel -= 0.3 * (ticks - prev_size);
                     }
+                    else if (ref_vel < behavior_plan_speed)
+                    {
+                        // if the current speed is below the planned speed, speed up
+                        ref_vel += 0.1 * (ticks - prev_size);
+                        ref_vel = min(ref_vel, max_vel);
+                    }
+                    cout << "Current speed: " << ref_vel << endl;
 
                     /**************************************
                     * Code from walktrough video
                     *************************************/
-                    int prev_size = previous_path_x.size();
-                    cout << "number of previous_path points not driven: " << prev_size << endl;
 
                     // when there is no old trajectory, use vehicle position as start
                     if (prev_size < 1)
@@ -440,7 +488,7 @@ int main()
                     {
                         next_x_vals.push_back(previous_path_x[i]);
                         next_y_vals.push_back(previous_path_y[i]);
-                        cout << "previous waypoints. Number: " << i << " x:  " << previous_path_x[i] << "  y: " << previous_path_y[i] << endl;
+                        // cout << "previous waypoints. Number: " << i << " x:  " << previous_path_x[i] << "  y: " << previous_path_y[i] << endl;
                     }
 
                     // cout << "last previous point: " << previous_path_x[prev_size - 1];
@@ -451,7 +499,7 @@ int main()
                     double x_add_on = 0.0;
 
                     // create driving points
-                    for (int i = 0; i < 50 - prev_size; i++)
+                    for (int i = 0; i < ticks - prev_size; i++)
                     {
                         double N = target_dist / (0.02 * ref_vel / 2.24);
                         double x_point = x_add_on + target_x / N;
@@ -466,7 +514,7 @@ int main()
                         x_point = ref_x + ((x_ref * cos(ref_yaw)) - (y_ref * sin(ref_yaw)));
                         y_point = ref_y + ((x_ref * sin(ref_yaw)) + (y_ref * cos(ref_yaw)));
 
-                        cout << "next waypoints. Number: " << i << " x:  " << x_point << "  y: " << y_point << endl;
+                        // cout << "next waypoints. Number: " << i << " x:  " << x_point << "  y: " << y_point << endl;
 
                         next_x_vals.push_back(x_point);
                         next_y_vals.push_back(y_point);
