@@ -12,6 +12,7 @@
 #include <fstream>
 #include <cmath>
 #include "Eigen-3.3/Eigen/Dense"
+#include "helper.hpp"
 
 using namespace std;
 
@@ -286,8 +287,8 @@ int main()
                     // j[1] is the data JSON object
 
                     /*******************
-			Sim Output
-			*******************/
+                    Sim Output
+                    *******************/
                     // Main car's localization Data
                     double car_x = j[1]["x"];         // Vehicle position Map x
                     double car_y = j[1]["y"];         // Vehicle position Map y
@@ -311,34 +312,118 @@ int main()
                     int num_middle_lane = 0;
                     int num_right_lane = 0;
 
+
+
+                    // loop through all vehicles and sort vehicles by lane
+                    vector<vector<double>> lane0_vehicles, lane1_vehicles, lane2_vehicles;
                     for (int i = 0; i < sensor_fusion.size(); i++)
                     {
                         float d = sensor_fusion[i][6];
-                        float s = sensor_fusion[i][5];
-                        if (s > car_s)
+
+                        if ((d > 0) && (d <= 4))
                         {
-                            if (d < 4)
-                            {
-                                num_left_lane++;
-                            }
-                            else if ((d > 4) && (d < 8))
-                            {
-                                num_middle_lane++;
-                                // if (s < car_s+30)
-                                // {
-                                //     lane = 0;
-                                // }
-                            }
-                            else if (d > 8)
-                            {
-                                num_right_lane++;
-                            }
+                            // vehicle is in lane 0
+                            lane0_vehicles.push_back(sensor_fusion[i]);
+                        }
+                        else if ((d > 4) && (d <= 8))
+                        {
+                            // vehicle is in lane 1
+                            lane1_vehicles.push_back(sensor_fusion[i]);
+                        }
+                        else if ((d > 8) && (d <= 12))
+                        {
+                            // vehicle is in lane 2
+                            lane2_vehicles.push_back(sensor_fusion[i]);
                         }
                     }
 
-                    cout << "vehicles on left lane: " << num_left_lane << endl;
-                    cout << "vehicles on middle lane: " << num_middle_lane << endl;
-                    cout << "vehicles on right lane: " << num_right_lane << endl;
+                    
+                    // vector<double> lane0_nearest = findNearestVehicle(car_s, lane0_vehicles);
+                    // cout << "lane0: " << lane0_nearest[0] << ", " << lane0_nearest[1] << endl;
+                    
+                    // vector<double> lane1_nearest = findNearestVehicle(car_s, lane1_vehicles);
+                    // cout << "lane1: " << lane1_nearest[0] << ", " << lane1_nearest[1] << endl; 
+                    
+                    // vector<double> lane2_nearest = findNearestVehicle(car_s, lane2_vehicles);
+                    // cout << "lane1: " << lane2_nearest[0] << ", " << lane2_nearest[1] << endl; 
+                    vector<double> vehicle_in_front = findVehicleInFront(lane, car_s, sensor_fusion);
+                    if ((vehicle_in_front[1] < max_vel) && vehicle_in_front[0] < 60)
+                    {
+                        // there is a vehicle in front that is slower
+                        // check other lanes
+                        // if other lanes are free, change lane
+                        // if other lanes are not free, adjust speed
+
+                        cout << "There is a slower car in front!" << " Speed: " << vehicle_in_front[1] << endl;
+                        // for (int i = 0; i < 3; i++)
+                        // {
+                        //     // go through all lanes
+                        //     if (i != lane)
+                        //     {
+                        //         // omit own lane
+
+                        //     }
+
+                        // }
+
+
+                    } 
+
+
+
+
+                    // for (int i = 0; i < sensor_fusion.size(); i++)
+                    // {
+                    //     double d = sensor_fusion[i][6];
+                    //     double s = sensor_fusion[i][5];
+                    //     if (s > car_s)
+                    //     {
+                    //         if (d < 4)
+                    //         {
+                    //             num_left_lane++;
+                    //         }
+                    //         else if ((d > 4) && (d < 8))
+                    //         {
+                    //             num_middle_lane++;
+                    //             // if (s < car_s+30)
+                    //             // {
+                    //             //     lane = 0;
+                    //             // }
+                    //         }
+                    //         else if (d > 8)
+                    //         {
+                    //             num_right_lane++;
+                    //         }
+                    //     }
+                    // }
+
+                    // cout << "vehicles on left lane: " << num_left_lane << endl;
+                    cout << "vehicles on left lane: " << lane0_vehicles.size() << endl;
+                    cout << "vehicles on middle lane: " << lane1_vehicles.size() << endl;
+                    cout << "vehicles on right lane: " << lane2_vehicles.size() << endl;
+
+                    // testtesttest();
+
+                    /* algorithm:
+                    - check own lane for vehicles below v_max
+                    - if there isn't: continue
+                    - if there is one: check other lanes
+                    -- if there is a free lane adjacent: change lane
+                    -- if there isn't: adjust planned speed to speed of previous vehicle
+                    */
+
+                    /* to check if other lane is free: 
+                    - determine adjacent lanes (maybe not, maybe check all lanes and change to middle lane)
+                    - check lanes if there is any vehicle in front that is slower than v_max
+                    - check if there is any vehicle behind the car that is faster
+                    - change to lane where vehicle in front is further away and/or faster
+                    */
+
+                    /* procedures:
+                    - sort vehicles to lanes
+                    - find nearest vehicle in front. return distance, speed
+                    - find fast vehicle behind. return bool
+                     */
 
                     // cout << "vehicle speed reported: " << car_speed << endl;
                     double closest_vehicle_in_lane = 99999;
