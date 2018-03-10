@@ -261,6 +261,7 @@ int main()
 
     // initialize hyperparameters
     int lane = 1;
+    bool keep_lane = true;
     double ref_vel = 0.0;
     const double max_vel = 49.5;
     const int ticks = 50;
@@ -312,30 +313,30 @@ int main()
                     int num_middle_lane = 0;
                     int num_right_lane = 0;
 
+                    // cout << "-----------------------------------------------------" << endl;
 
+                    // // loop through all vehicles and sort vehicles by lane
+                    // vector<vector<double>> lane0_vehicles, lane1_vehicles, lane2_vehicles;
+                    // for (int i = 0; i < sensor_fusion.size(); i++)
+                    // {
+                    //     float d = sensor_fusion[i][6];
 
-                    // loop through all vehicles and sort vehicles by lane
-                    vector<vector<double>> lane0_vehicles, lane1_vehicles, lane2_vehicles;
-                    for (int i = 0; i < sensor_fusion.size(); i++)
-                    {
-                        float d = sensor_fusion[i][6];
-
-                        if ((d > 0) && (d <= 4))
-                        {
-                            // vehicle is in lane 0
-                            lane0_vehicles.push_back(sensor_fusion[i]);
-                        }
-                        else if ((d > 4) && (d <= 8))
-                        {
-                            // vehicle is in lane 1
-                            lane1_vehicles.push_back(sensor_fusion[i]);
-                        }
-                        else if ((d > 8) && (d <= 12))
-                        {
-                            // vehicle is in lane 2
-                            lane2_vehicles.push_back(sensor_fusion[i]);
-                        }
-                    }
+                    //     if ((d > 0) && (d <= 4))
+                    //     {
+                    //         // vehicle is in lane 0
+                    //         lane0_vehicles.push_back(sensor_fusion[i]);
+                    //     }
+                    //     else if ((d > 4) && (d <= 8))
+                    //     {
+                    //         // vehicle is in lane 1
+                    //         lane1_vehicles.push_back(sensor_fusion[i]);
+                    //     }
+                    //     else if ((d > 8) && (d <= 12))
+                    //     {
+                    //         // vehicle is in lane 2
+                    //         lane2_vehicles.push_back(sensor_fusion[i]);
+                    //     }
+                    // }
 
                     
                     // vector<double> lane0_nearest = findNearestVehicle(car_s, lane0_vehicles);
@@ -346,30 +347,91 @@ int main()
                     
                     // vector<double> lane2_nearest = findNearestVehicle(car_s, lane2_vehicles);
                     // cout << "lane1: " << lane2_nearest[0] << ", " << lane2_nearest[1] << endl; 
-                    vector<double> vehicle_in_front = findVehicleInFront(lane, car_s, sensor_fusion);
-                    if ((vehicle_in_front[1] < max_vel) && vehicle_in_front[0] < 60)
+
+                    // update lane
+                    // lane = round((car_d-2)/4);
+                    // cout << "detected lane: " << lane << endl; 
+
+                    double behavior_plan_speed = max_vel;
+
+
+
+                    vector<int> change_lane_candidate;
+                    vector<bool> lane_free = {false, false, false};
+                    vector<double> vehicle_in_front = findVehicleInLane(lane, car_s, sensor_fusion);
+                    // there is a vehicle in front that is slower
+                    if ((vehicle_in_front[1] < max_vel) && vehicle_in_front[0] < 40)
                     {
-                        // there is a vehicle in front that is slower
                         // check other lanes
                         // if other lanes are free, change lane
                         // if other lanes are not free, adjust speed
 
                         cout << "There is a slower car in front!" << " Speed: " << vehicle_in_front[1] << endl;
-                        // for (int i = 0; i < 3; i++)
-                        // {
-                        //     // go through all lanes
-                        //     if (i != lane)
-                        //     {
-                        //         // omit own lane
+                        // go through all lanes
+                        for (int i = 0; i < 3; i++)
+                        {
+                            // check other lanes while omitting own lane 
+                            if (i != lane)
+                            {
+                                vector<double> other_lane_vehicle = findVehicleInLane(i, car_s, sensor_fusion);
+                                // check if there is a vehicle in the other lane that is far enough in front
+                                // and faster than the vehicle in the own lane
+                                // and check if there is a vehicle right beside or behind the car
+                                cout << "Vehicle in lane " << i << ": " << other_lane_vehicle[0] << "; " << other_lane_vehicle[1] << endl;
+                                if ((other_lane_vehicle[0] > 30) && (other_lane_vehicle[1] > vehicle_in_front[1]) && laneClear(i, car_s, sensor_fusion))
+                                {
+                                    change_lane_candidate.push_back(i);
+                                    lane_free[i] = true; // save which lane would be possible
+                                    cout << "It would be possible to change to lane " << i << "." << endl;
+                                }
+                            }
+                        }
 
-                        //     }
+                        // Behavior Planning
 
-                        // }
-
-
+                        cout << "Debug out: lane_free[0] : " << lane_free[0] << ", " << lane_free[1] << ", " << lane_free[2] << endl;
+                        // depending on the current lane, exclude impossible lane
+                        // if two are possible, decide on the faster overall lane
+                        // if lane 1 is free, change to it. This is independent of the current lane. Check README for explainer.
+                        if (lane_free[1]) {lane = 1;}
+                        else if (lane_free[0] && lane_free[2]) // both left and right lane is free. Decide on overall lane speed.
+                        {
+                            // decide based on slowest speed in lane in front of car 
+                            if (slowLaneSpeed(0, car_s, sensor_fusion) > slowLaneSpeed(2, car_s, sensor_fusion)) {lane = 0;}
+                            else {lane = 2;}
+                        }
+                        else if (lane == 1 && lane_free[0] && !lane_free[2]) {lane = 0;}
+                        else if (lane == 1 && !lane_free[0] && lane_free[2]) {lane = 2;}
+                        else if (lane == 0 && lane_free[2] && !lane_free[1] && laneClear(1, car_s, sensor_fusion)) {lane = 1;}
+                        else if (lane == 2 && lane_free[0] && !lane_free[1] && laneClear(1, car_s, sensor_fusion)) {lane = 1;}
+                        else // in all other cases, there is no free lane
+                        {
+                            // adjust speed based on current lane speed
+                            if (vehicle_in_front[0] < 25.0)
+                            {
+                                // if the closest vehicle in front is at a proper distance, match speed
+                                behavior_plan_speed = vehicle_in_front[1];
+                                cout << "updated planned speed to: " << behavior_plan_speed << endl;
+                                cout << "Distance to vehicle in front: " << vehicle_in_front[0] << endl;
+                            }
+                            if (vehicle_in_front[0] < 20.0)
+                            {   
+                                // if the vehicle in front is to close, reduce speed a bit more until the distance is safe
+                                behavior_plan_speed -= 5;
+                                cout << "vehicle in front to close, breaking!" << endl;
+                            }
+                        }                     
                     } 
 
+                    // cout << "Debug out laneClear 0: " << laneClear(0, car_s, sensor_fusion) << endl;
 
+
+                    // check possible lane candidates for faster vehicles behind and 
+                    // decide between lanes based on speed in lane
+                    // cout << endl << endl;
+
+                    // cout << "Lane 0 clear: " << laneClear(0, car_s, sensor_fusion) << endl;
+                    // cout << "Lane 2 clear: " << laneClear(2, car_s, sensor_fusion) << endl;
 
 
                     // for (int i = 0; i < sensor_fusion.size(); i++)
@@ -398,9 +460,9 @@ int main()
                     // }
 
                     // cout << "vehicles on left lane: " << num_left_lane << endl;
-                    cout << "vehicles on left lane: " << lane0_vehicles.size() << endl;
-                    cout << "vehicles on middle lane: " << lane1_vehicles.size() << endl;
-                    cout << "vehicles on right lane: " << lane2_vehicles.size() << endl;
+                    // cout << "vehicles on left lane: " << lane0_vehicles.size() << endl;
+                    // cout << "vehicles on middle lane: " << lane1_vehicles.size() << endl;
+                    // cout << "vehicles on right lane: " << lane2_vehicles.size() << endl;
 
                     // testtesttest();
 
@@ -426,46 +488,42 @@ int main()
                      */
 
                     // cout << "vehicle speed reported: " << car_speed << endl;
-                    double closest_vehicle_in_lane = 99999;
-                    double behavior_plan_speed = max_vel;
+                    // double closest_vehicle_in_lane = 99999;
                     
-                    // update lane
-                    lane = round((car_d-2)/4);
-                    cout << "detected lane: " << lane << endl; 
 
-                    // loop through all vehicles
-                    for (int i = 0; i < sensor_fusion.size(); i++)
-                    {
-                        float d = sensor_fusion[i][6];
-                        float s = sensor_fusion[i][5];
+                    // // loop through all vehicles
+                    // for (int i = 0; i < sensor_fusion.size(); i++)
+                    // {
+                    //     float d = sensor_fusion[i][6];
+                    //     float s = sensor_fusion[i][5];
 
-                        if ((d > (2+lane*4)-2) && (d < (2+lane*4)+2))
-                        {
-                            // vehicle is in my lane
-                            if ((s > car_s) && (closest_vehicle_in_lane > (s - car_s)))
-                            {   
-                                // find vehicle in same lane that is closest.
-                                closest_vehicle_in_lane = (s - car_s);
-                                double vx = sensor_fusion[i][3];
-                                double vy = sensor_fusion[i][4];
-                                cout << "found vehicle in same lane with distance and speed: " << closest_vehicle_in_lane << " " << sqrt(vx*vx+vy*vy)*2.24 << endl; 
-                                if (closest_vehicle_in_lane < 35.0)
-                                {
-                                    // if the closest vehicle in front is at a proper distance, match speed
-                                    behavior_plan_speed = sqrt(vx*vx+vy*vy)*2.24;
-                                    cout << "updated planned speed to: " << behavior_plan_speed << endl;
-                                }
-                                if (closest_vehicle_in_lane < 25.0)
-                                {   
-                                    // if the vehicle in front is to close, reduce speed a bit more until the distance is safe
-                                    behavior_plan_speed -= 5;
-                                    cout << "vehicle in front to close, breaking!" << endl;
-                                }
-                            }
+                    //     if ((d > (2+lane*4)-2) && (d < (2+lane*4)+2))
+                    //     {
+                    //         // vehicle is in my lane
+                    //         if ((s > car_s) && (closest_vehicle_in_lane > (s - car_s)))
+                    //         {   
+                    //             // find vehicle in same lane that is closest.
+                    //             closest_vehicle_in_lane = (s - car_s);
+                    //             double vx = sensor_fusion[i][3];
+                    //             double vy = sensor_fusion[i][4];
+                    //             cout << "found vehicle in same lane with distance and speed: " << closest_vehicle_in_lane << " " << sqrt(vx*vx+vy*vy)*2.24 << endl; 
+                    //             if (closest_vehicle_in_lane < 35.0)
+                    //             {
+                    //                 // if the closest vehicle in front is at a proper distance, match speed
+                    //                 behavior_plan_speed = sqrt(vx*vx+vy*vy)*2.24;
+                    //                 cout << "updated planned speed to: " << behavior_plan_speed << endl;
+                    //             }
+                    //             if (closest_vehicle_in_lane < 25.0)
+                    //             {   
+                    //                 // if the vehicle in front is to close, reduce speed a bit more until the distance is safe
+                    //                 behavior_plan_speed -= 5;
+                    //                 cout << "vehicle in front to close, breaking!" << endl;
+                    //             }
+                    //         }
                             
                         
-                        }
-                    }
+                    //     }
+                    // }
 
                     /*******************s
                     Sim Input
@@ -501,7 +559,7 @@ int main()
                         ref_vel += 0.1 * (ticks - prev_size);
                         ref_vel = min(ref_vel, max_vel);
                     }
-                    cout << "Current speed: " << ref_vel << endl;
+                    // cout << "Current speed: " << ref_vel << endl;
 
                     /**************************************
                     * Code from walktrough video
@@ -604,7 +662,7 @@ int main()
                         next_x_vals.push_back(x_point);
                         next_y_vals.push_back(y_point);
                     }
-                    cout << endl;
+                    // cout << endl;
 
                     // define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
                     msgJson["next_x"] = next_x_vals;
