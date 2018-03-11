@@ -8,7 +8,7 @@ The goal of this project was to safely navigate a vehicle around on a 3-lane hig
 The approach used was a simple decision tree that let the vehicle choose the fastest lane while avoiding other vehicles. Doing this the vehicle was able to drive around the track without crashes for hours.
 
 Project video: (Youtube Link)
-[![Project track](https://github.com/stefancyliax/CarND-Path-Planning-Project/raw/master/pic/MPC.gif)](https://www.youtube.com/watch?v=GHt7KMsX5p8)
+[![Project track](https://github.com/stefancyliax/CarND-Path-Planning-Project/raw/master/pic/PP.gif)](https://www.youtube.com/watch?v=GHt7KMsX5p8)
 
 ## Approach
 
