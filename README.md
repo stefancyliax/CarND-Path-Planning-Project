@@ -1,72 +1,92 @@
-# CarND-Path-Planning-Project
-Self-Driving Car Engineer Nanodegree Program
-   
-### Simulator.
-You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases).
+# Udacity SDCND Project 11: Path Planning
+[![Udacity - Self-Driving Car NanoDegree](https://s3.amazonaws.com/udacity-sdc/github/shield-carnd.svg)](http://www.udacity.com/drive)
 
-### Goals
-In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
-#### The map of the highway is in data/highway_map.txt
-Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
 
-The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
+The goal of this project was to safely navigate a vehicle around on a 3-lane highway with other traffic. The vehicle had to plan its path around the track, overtake slower cars and stay within given limits for speed, acceleration and jerk. The project uses the [term 3 simulator](https://github.com/udacity/self-driving-car-sim/releases). 
 
-## Basic Build Instructions
+The approach used was a simple decision tree that let the vehicle choose the fastest lane while avoiding other vehicles. Doing this the vehicle was able to drive around the track without crashes for hours.
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./path_planning`.
+Project video: (Youtube Link)
+[![Project track](https://github.com/stefancyliax/CarND-Path-Planning-Project/raw/master/pic/MPC.gif)](https://www.youtube.com/watch?v=GHt7KMsX5p8)
 
-Here is the data provided from the Simulator to the C++ Program
+## Approach
 
-#### Main car's localization Data (No Noise)
+Besides data about the track and the position of the vehicle on the track, the simulator also provided information about other vehicles on the track. With this I could implement a behavioral planning using a simple decision tree. The behavioral plan was then used to generate a trajectory and the trajectory was realized with a simple motion controller.
 
-["x"] The car's x position in map coordinates
+The behavioral planner works like this:
+If the lane of the vehicle is free, just keep the maximum allowed speed.
+If there is a vehicle in the lane that is slower and closer then 40m, check the other lanes.
+```cpp
+if ((vehicle_in_front[1] < max_vel) && vehicle_in_front[0] < 40)
+```
+The other lanes are checked for if there is a vehicle not closer than 40m in front and the lane clear for a lane change?
+```cpp
+if (((other_lane_vehicle[0] > 40) && laneClear(i, car_s, sensor_fusion))
+```
+If the questions is true, the lane is marked as a possible for a lane change. Based on the current lane and the possible other lanes, a decision is derived like this: 
 
-["y"] The car's y position in map coordinates
+| Lanes free / current lane | 0           | 1                       | 2           |
+|---------------------------|-------------|-------------------------|-------------|
+|                        -- | Keep lane   | Keep lane               | Keep lane   |
+|                         0 | --          | Change to 0             | Keep lane*2 |
+|                         1 | Change to 1 | --                      | Change to 1 |
+|                         2 | Keep lane*2 | Change to 2             | --          |
+|                      0; 1 | --          | --                      | Change to 1 |
+|                      0; 2 | --          | Decide based on speed*1 | --          |
+|                      1; 2 | Change to 1 | --                      | --          |
 
-["s"] The car's s position in frenet coordinates
+*1: If the vehicle is on the middle lane and both the left and right lanes are free, the decision is done based on the slowest vehicle on front of the car. The lane which has a higher slowest speed is chosen.
 
-["d"] The car's d position in frenet coordinates
+*2: I also implemented a solution where the vehicle would change from the outer lane to the other outer lane if there was a gap. This worked perfectly but caused high jerk. It was implemented like this:
 
-["yaw"] The car's yaw angle in the map
+```cpp
+// else if (lane == 0 && lane_free[2] && !lane_free[1] && laneClear(1, car_s, sensor_fusion)) {lane = 1;}
+// else if (lane == 2 && lane_free[0] && !lane_free[1] && laneClear(1, car_s, sensor_fusion)) {lane = 1;}
+```
 
-["speed"] The car's speed in MPH
+This decision tree was implemented like this:
 
-#### Previous path data given to the Planner
+```cpp
+if (lane_free[1])
+{
+    lane = 1;
+}
+else if (lane_free[0] && lane_free[2]) // both left and right lane is free. Decide on overall lane speed.
+{
+    if (slowLaneSpeed(0, car_s, sensor_fusion) > slowLaneSpeed(2, car_s, sensor_fusion))
+    {
+        lane = 0;
+    }
+    else
+    {
+        lane = 2;
+    }
+}
+else if (lane == 1 && lane_free[0] && !lane_free[2])
+{
+    lane = 0;
+}
+else if (lane == 1 && !lane_free[0] && lane_free[2])
+{
+    lane = 2;
+}
+else // in all other cases, there is no free lane
+{
+    // adjust speed based on current lane speed
+}
+}
+```
 
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time. 
+# Reflection
+I did not enjoy this project. First I planned to implement a proper jerk-limited controller for the vehicle but this wasn't told in the lessons. After some research on my own, I implemented a jerk-limited controller using s = s0 + v0*t + 1/2 * a0 * t^2 + 1/6 * j * t^3. But in the end it proved to be very difficult to include it in the given code that is rather fragile. Also handling the curves and lane changes was a challenge. In the end I reverted the controller back to the code provided in the walkthrough video. 
+Second the path planning works but isn't very advanced. I wanted to do more but time limitations didn't allow for it. 
+This is probably a project I return to at a later point in time.
 
-["previous_path_x"] The previous list of x points previously given to the simulator
-
-["previous_path_y"] The previous list of y points previously given to the simulator
-
-#### Previous path's end s and d values 
-
-["end_path_s"] The previous list's last point's frenet s value
-
-["end_path_d"] The previous list's last point's frenet d value
-
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
-
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
-
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
 
 ---
 
-## Dependencies
+## Dependencies (from original README)
 
 * cmake >= 3.5
  * All OSes: [click here for installation instructions](https://cmake.org/install/)
@@ -86,55 +106,3 @@ A really helpful resource for doing this project and creating smooth trajectorie
     cd uWebSockets
     git checkout e94b6e1
     ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
-
